@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- Background music -->
-  <audio id="bgMusic" src="rr1.mp3" autoplay loop></audio>
+  <audio id="bgMusic" src="rr1.mp3"></audio>
   <main>
     <header>
       <svg class="lotus" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -22,8 +22,8 @@
       <div id="timer" class="timer" aria-live="polite" aria-atomic="true">01:00</div>
       <div class="subtext">Focus on a સીતારામ or breath. The timer will restart automatically.</div>
       <div role="group" aria-label="Timer controls" class="controls">
-  <button id="toggleBtn" aria-pressed="false">Pause</button>
-  <button id="restartBtn">Restart</button>
+        <button id="toggleBtn" aria-pressed="false">Pause</button>
+        <button id="restartBtn">Restart</button>
       </div>
       <div id="sessionBadge" aria-hidden="true">Cycles: 0</div>
     </section>
@@ -32,5 +32,15 @@
     </footer>
   </main>
   <script defer src="script.js"></script>
+  <script>
+    // Start background audio when user interacts with the page
+    document.addEventListener('click', function startAudio() {
+      const bgMusic = document.getElementById('bgMusic');
+      bgMusic.loop = true;
+      bgMusic.volume = 0.3; // Set a reasonable volume
+      bgMusic.play().catch(e => console.log("Audio playback failed:", e));
+      document.removeEventListener('click', startAudio);
+    }, { once: true });
+  </script>
 </body>
 </html>
