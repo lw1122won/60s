@@ -203,9 +203,13 @@ function toggleMute() {
   muted = !muted;
   muteBtn.setAttribute('aria-pressed', muted.toString());
   muteBtn.textContent = muted ? 'Unmute' : 'Mute';
-  // Mute/unmute background music
+  // Mute/unmute background music (do not call play() on unmute)
   if (bgMusic) {
     bgMusic.muted = muted;
+    // If muting, pause the music; if unmuting, do not auto-play
+    if (muted) {
+      bgMusic.pause();
+    }
   }
   // Save to localStorage
   localStorage.setItem('shanti_muted', muted.toString());
@@ -246,7 +250,10 @@ document.addEventListener('DOMContentLoaded', () => {
       playPromise.catch(() => {
         // If autoplay is blocked, play on first user interaction
         const unlock = () => {
-          bgMusic.play();
+          // Only play if not muted
+          if (!muted) {
+            bgMusic.play();
+          }
           document.removeEventListener('click', unlock);
           document.removeEventListener('keydown', unlock);
         };
@@ -254,21 +261,19 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('keydown', unlock);
       });
     }
+    // If muted on load, pause music
+    if (localStorage.getItem('shanti_muted') === 'true') {
+      bgMusic.muted = true;
+      bgMusic.pause();
+    }
   }
   
   // Load saved state
-  const savedMuted = localStorage.getItem('shanti_muted');
   const savedRunning = localStorage.getItem('shanti_running');
   const savedPausedRemaining = localStorage.getItem('shanti_paused_remaining');
   const savedSessionCount = localStorage.getItem('shanti_session_count');
   
-  // Restore mute state
-  if (savedMuted === 'true') {
-    muted = true;
-    muteBtn.setAttribute('aria-pressed', 'true');
-    muteBtn.textContent = 'Unmute';
-    if (bgMusic) bgMusic.muted = true;
-  }
+
   
   // Restore session count
   if (savedSessionCount) {
@@ -295,7 +300,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add event listeners
   toggleBtn.addEventListener('click', toggleTimer);
   restartBtn.addEventListener('click', restartTimer);
-  muteBtn.addEventListener('click', toggleMute);
   document.addEventListener('keydown', handleKeyboardShortcuts);
   
   // Start timer automatically if not previously paused
