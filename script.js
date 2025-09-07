@@ -4,14 +4,13 @@
 const DURATION = 60; // 60 seconds
 const TICK_INTERVAL = 250; // 250ms for smooth display
 
-// DOM Elements
-const timerElement = document.getElementById('timer');
-const toggleBtn = document.getElementById('toggleBtn');
-const restartBtn = document.getElementById('restartBtn');
-const muteBtn = document.getElementById('muteBtn');
-const sessionBadge = document.getElementById('sessionBadge');
+// State variables (declare but don't initialize DOM elements yet)
+let timerElement = null;
+let toggleBtn = null;
+let restartBtn = null;
+let muteBtn = null;
+let sessionBadge = null;
 
-// State variables
 let endTimeMs = 0;
 let intervalId = null;
 let pausedRemainingMs = DURATION * 1000;
@@ -74,6 +73,8 @@ function msToMMSS(ms) {
 
 // Called when timer reaches 0
 function onFinish() {
+  if (!timerElement) return;
+  
   timerElement.textContent = '00:00';
   timerElement.classList.add('finish');
   
@@ -95,14 +96,18 @@ function onFinish() {
   
   // Increment session counter
   sessionCount++;
-  sessionBadge.textContent = `Cycles: ${sessionCount}`;
+  if (sessionBadge) {
+    sessionBadge.textContent = `Cycles: ${sessionCount}`;
+  }
   
   // Save to localStorage
   localStorage.setItem('shanti_session_count', sessionCount.toString());
   
   // Remove finish animation class after animation completes
   setTimeout(() => {
-    timerElement.classList.remove('finish');
+    if (timerElement) {
+      timerElement.classList.remove('finish');
+    }
   }, 600);
   
   // Start next cycle
@@ -124,7 +129,9 @@ function tick() {
     return;
   }
   
-  timerElement.textContent = msToMMSS(remainingMs);
+  if (timerElement) {
+    timerElement.textContent = msToMMSS(remainingMs);
+  }
 }
 
 // Start the timer
@@ -132,8 +139,10 @@ function startTimer() {
   if (running) return;
   
   running = true;
-  toggleBtn.setAttribute('aria-pressed', 'false');
-  toggleBtn.textContent = 'Pause';
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-pressed', 'false');
+    toggleBtn.textContent = 'Pause';
+  }
   
   // If we have paused time, use it; otherwise start fresh
   if (pausedRemainingMs > 0 && pausedRemainingMs < DURATION * 1000) {
@@ -160,8 +169,10 @@ function pauseTimer() {
   if (!running) return;
   
   running = false;
-  toggleBtn.setAttribute('aria-pressed', 'true');
-  toggleBtn.textContent = 'Resume';
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-pressed', 'true');
+    toggleBtn.textContent = 'Resume';
+  }
   
   // Clear interval
   clearInterval(intervalId);
@@ -191,7 +202,9 @@ function restartTimer() {
     setEndFromNow();
     tick(); // Update display immediately
   } else {
-    timerElement.textContent = '01:00';
+    if (timerElement) {
+      timerElement.textContent = '01:00';
+    }
   }
   
   // Save state
@@ -201,16 +214,33 @@ function restartTimer() {
 // Toggle mute
 function toggleMute() {
   muted = !muted;
-  muteBtn.setAttribute('aria-pressed', muted.toString());
-  muteBtn.textContent = muted ? 'Unmute' : 'Mute';
-  // Mute/unmute background music (do not call play() on unmute)
+  if (muteBtn) {
+    muteBtn.setAttribute('aria-pressed', muted.toString());
+    muteBtn.textContent = muted ? 'Unmute' : 'Mute';
+  }
+  
+  // Handle background music muting
   if (bgMusic) {
-    bgMusic.muted = muted;
-    // If muting, pause the music; if unmuting, do not auto-play
     if (muted) {
       bgMusic.pause();
+    } else {
+      // Only attempt to play if we have user interaction
+      bgMusic.play().catch(e => {
+        console.log("Cannot autoplay music without user interaction:", e);
+        // Set up event listener for first user interaction
+        const playOnInteraction = () => {
+          bgMusic.play().catch(err => console.log("Still cannot play:", err));
+          document.removeEventListener('click', playOnInteraction);
+          document.removeEventListener('touchstart', playOnInteraction);
+          document.removeEventListener('keydown', playOnInteraction);
+        };
+        document.addEventListener('click', playOnInteraction);
+        document.addEventListener('touchstart', playOnInteraction);
+        document.addEventListener('keydown', playOnInteraction);
+      });
     }
   }
+  
   // Save to localStorage
   localStorage.setItem('shanti_muted', muted.toString());
 }
@@ -236,74 +266,116 @@ function handleKeyboardShortcuts(e) {
   }
 }
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize the application
+function initApp() {
+  // Get DOM elements
+  timerElement = document.getElementById('timer');
+  toggleBtn = document.getElementById('toggleBtn');
+  restartBtn = document.getElementById('restartBtn');
+  muteBtn = document.getElementById('muteBtn');
+  sessionBadge = document.getElementById('sessionBadge');
+  bgMusic = document.getElementById('bgMusic');
+  
   // Initialize audio
   initAudio();
-  // Play background music
-  bgMusic = document.getElementById('bgMusic');
+  
+  // Setup background music
   if (bgMusic) {
-    // Try to play immediately (may be blocked by browser until user interacts)
     bgMusic.volume = 0.5;
+    bgMusic.loop = true;
+    
+    // Check if previously muted
+    const savedMuted = localStorage.getItem('shanti_muted') === 'true';
+    muted = savedMuted;
+    if (muted && muteBtn) {
+      muteBtn.setAttribute('aria-pressed', 'true');
+      muteBtn.textContent = 'Unmute';
+      bgMusic.muted = true;
+    }
+    
+    // Try to play background music
     const playPromise = bgMusic.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        // If autoplay is blocked, play on first user interaction
-        const unlock = () => {
-          // Only play if not muted
+      playPromise.catch(error => {
+        console.log('Autoplay prevented:', error);
+        // Setup event listeners to play on first user interaction
+        const unlockAudio = () => {
           if (!muted) {
-            bgMusic.play();
+            bgMusic.play().catch(e => console.log('Playback failed after interaction:', e));
           }
-          document.removeEventListener('click', unlock);
-          document.removeEventListener('keydown', unlock);
+          document.removeEventListener('click', unlockAudio);
+          document.removeEventListener('touchstart', unlockAudio);
+          document.removeEventListener('keydown', unlockAudio);
         };
-        document.addEventListener('click', unlock);
-        document.addEventListener('keydown', unlock);
+        document.addEventListener('click', unlockAudio, { once: true });
+        document.addEventListener('touchstart', unlockAudio, { once: true });
+        document.addEventListener('keydown', unlockAudio, { once: true });
       });
-    }
-    // If muted on load, pause music
-    if (localStorage.getItem('shanti_muted') === 'true') {
-      bgMusic.muted = true;
-      bgMusic.pause();
     }
   }
   
   // Load saved state
+  const savedMuted = localStorage.getItem('shanti_muted');
   const savedRunning = localStorage.getItem('shanti_running');
   const savedPausedRemaining = localStorage.getItem('shanti_paused_remaining');
   const savedSessionCount = localStorage.getItem('shanti_session_count');
   
-
+  // Restore mute state
+  if (savedMuted === 'true') {
+    muted = true;
+    if (muteBtn) {
+      muteBtn.setAttribute('aria-pressed', 'true');
+      muteBtn.textContent = 'Unmute';
+    }
+  }
   
   // Restore session count
   if (savedSessionCount) {
     sessionCount = parseInt(savedSessionCount, 10);
-    sessionBadge.textContent = `Cycles: ${sessionCount}`;
+    if (sessionBadge) {
+      sessionBadge.textContent = `Cycles: ${sessionCount}`;
+    }
   }
   
   // Restore timer state
   if (savedPausedRemaining) {
     pausedRemainingMs = parseInt(savedPausedRemaining, 10);
-    timerElement.textContent = msToMMSS(pausedRemainingMs);
+    if (timerElement) {
+      timerElement.textContent = msToMMSS(pausedRemainingMs);
+    }
   }
   
-  // Start or restore timer based on saved state
-  if (savedRunning === '1') {
-    startTimer();
-  } else if (savedPausedRemaining) {
-    // Keep paused but show saved remaining time
-    running = false;
-    toggleBtn.setAttribute('aria-pressed', 'true');
-    toggleBtn.textContent = 'Resume';
+  // Add event listeners (safely check if elements exist)
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleTimer);
   }
-  
-  // Add event listeners
-  toggleBtn.addEventListener('click', toggleTimer);
-  restartBtn.addEventListener('click', restartTimer);
+  if (restartBtn) {
+    restartBtn.addEventListener('click', restartTimer);
+  }
+  if (muteBtn) {
+    muteBtn.addEventListener('click', toggleMute);
+  }
   document.addEventListener('keydown', handleKeyboardShortcuts);
   
-  // Start timer automatically if not previously paused
-  if (savedRunning !== '0') {
+  // Start timer automatically
+  // If previously running, resume; otherwise start fresh
+  if (savedRunning === '1') {
     startTimer();
+  } else {
+    // Start fresh timer
+    running = false;
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-pressed', 'false');
+      toggleBtn.textContent = 'Pause';
+    }
+    startTimer(); // Start the timer automatically
   }
-});
+}
+
+// Wait for DOM to be fully loaded, then initialize
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  // DOM is already loaded
+  setTimeout(initApp, 0);
+}
